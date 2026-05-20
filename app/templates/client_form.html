@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == 'edit' %}Edit{% else %}New{% endif %} Client – AW Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>{% if mode == 'edit' %}Edit Client{% else %}New Client{% endif %}</h1>
+  {% if mode == 'edit' %}
+  <a href="{{ url_for('client_detail', client_id=client.id) }}" class="btn btn-outline">← Back</a>
+  {% else %}
+  <a href="{{ url_for('clients_list') }}" class="btn btn-outline">← Back</a>
+  {% endif %}
+</div>
+
+<form method="POST" id="clientForm">
+  <!-- ── Display Name ──────────────────────────────────────────────────── -->
+  <div class="card mb-4">
+    <div class="card-title">Client Identity</div>
+    <div class="form-row">
+      <div class="form-group col-full">
+        <label>Display Name <span class="required">*</span></label>
+        <input type="text" name="display_name" value="{{ client.display_name or '' }}"
+               placeholder="e.g. Smith Family" required class="form-control" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>First Name <span class="required">*</span></label>
+        <input type="text" name="client1_first" value="{{ client.client1_first or '' }}" required class="form-control" />
+      </div>
+      <div class="form-group">
+        <label>Last Name <span class="required">*</span></label>
+        <input type="text" name="client1_last" value="{{ client.client1_last or '' }}" required class="form-control" />
+      </div>
+      <div class="form-group">
+        <label>Date of Birth</label>
+        <input type="date" name="client1_dob" value="{{ client.client1_dob or '' }}" class="form-control" />
+      </div>
+      <div class="form-group">
+        <label>SSN Last 4</label>
+        <input type="text" name="client1_ssn4" value="{{ client.client1_ssn4 or '' }}"
+               maxlength="4" pattern="\d{0,4}" class="form-control" placeholder="0000" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group col-full">
+        <label class="checkbox-label">
+          <input type="checkbox" name="is_married" id="isMarried" value="1"
+                 {% if client.is_married %}checked{% endif %} />
+          Married couple (two clients)
+        </label>
+      </div>
+    </div>
+
+    <div id="spouseSection" class="{% if not client.is_married %}hidden{% endif %}">
+      <div class="section-sub-title">Spouse / Client 2</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>First Name</label>
+          <input type="text" name="client2_first" value="{{ client.client2_first or '' }}" class="form-control" />
+        </div>
+        <div class="form-group">
+          <label>Last Name</label>
+          <input type="text" name="client2_last" value="{{ client.client2_last or '' }}" class="form-control" />
+        </div>
+        <div class="form-group">
+          <label>Date of Birth</label>
+          <input type="date" name="client2_dob" value="{{ client.client2_dob or '' }}" class="form-control" />
+        </div>
+        <div class="form-group">
+          <label>SSN Last 4</label>
+          <input type="text" name="client2_ssn4" value="{{ client.client2_ssn4 or '' }}"
+                 maxlength="4" pattern="\d{0,4}" class="form-control" placeholder="0000" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Static Financials ─────────────────────────────────────────────── -->
+  <div class="card mb-4">
+    <div class="card-title">Static Financial Settings <span class="muted small">(used in every report)</span></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Client 1 Monthly Salary</label>
+        <div class="input-prefix"><span>$</span>
+          <input type="number" name="client1_salary" value="{{ client.client1_salary or '' }}"
+                 step="0.01" min="0" class="form-control" placeholder="8000" />
+        </div>
+      </div>
+      <div class="form-group" id="client2SalaryGroup" class="{% if not client.is_married %}hidden{% endif %}">
+        <label>Client 2 Monthly Salary</label>
+        <div class="input-prefix"><span>$</span>
+          <input type="number" name="client2_salary" value="{{ client.client2_salary or '' }}"
+                 step="0.01" min="0" class="form-control" placeholder="7000" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Monthly Expense Budget (Outflow)</label>
+        <div class="input-prefix"><span>$</span>
+          <input type="number" name="monthly_expenses" value="{{ client.monthly_expenses or '' }}"
+                 step="0.01" min="0" class="form-control" placeholder="12000" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Insurance Deductibles Total</label>
+        <div class="input-prefix"><span>$</span>
+          <input type="number" name="insurance_deductibles" value="{{ client.insurance_deductibles or '' }}"
+                 step="0.01" min="0" class="form-control" placeholder="3000" />
+        </div>
+      </div>
+    </div>
+    <p class="muted small">Private Reserve Target = (6 × monthly expenses) + deductibles</p>
+  </div>
+
+  <!-- ── Accounts ──────────────────────────────────────────────────────── -->
+  <div class="card mb-4">
+    <div class="card-title">Accounts &amp; Liabilities</div>
+    <p class="muted small mb-2">Add all accounts that will appear on TCC reports. Use "Liability" type for debts.</p>
+
+    <table class="acct-table" id="accountsTable">
+      <thead>
+        <tr>
+          <th>Owner</th>
+          <th>Type</th>
+          <th>Institution</th>
+          <th>Acct # (last 4)</th>
+          <th>Flags</th>
+          <th>Liab. Rate %</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="accountsBody">
+        {% for acct in accounts %}
+        {% set i = loop.index0 %}
+        <tr class="acct-row" data-idx="{{ i }}">
+          <td>
+            <select name="accounts[{{ i }}][owner]" class="form-control form-control-sm owner-select">
+              <option value="client1" {% if acct.owner == 'client1' %}selected{% endif %}>Client 1</option>
+              <option value="client2" {% if acct.owner == 'client2' %}selected{% endif %}>Client 2</option>
+              <option value="joint"   {% if acct.owner == 'joint'   %}selected{% endif %}>Joint</option>
+              <option value="trust"   {% if acct.owner == 'trust'   %}selected{% endif %}>Trust</option>
+            </select>
+          </td>
+          <td>
+            <select name="accounts[{{ i }}][account_type]" class="form-control form-control-sm type-select" onchange="onTypeChange(this, {{ i }})">
+              {% for t in account_types %}
+              <option value="{{ t }}" {% if acct.account_type == t %}selected{% endif %}>{{ t }}</option>
+              {% endfor %}
+            </select>
+          </td>
+          <td><input type="text" name="accounts[{{ i }}][institution]" value="{{ acct.institution or '' }}" class="form-control form-control-sm" /></td>
+          <td><input type="text" name="accounts[{{ i }}][account_number_last4]" value="{{ acct.account_number_last4 or '' }}" maxlength="4" class="form-control form-control-sm acct-num" /></td>
+          <td class="flags-cell">
+            <label class="flag-check"><input type="checkbox" name="accounts[{{ i }}][is_retirement]" value="1" {% if acct.is_retirement %}checked{% endif %} /> Ret</label>
+            <label class="flag-check"><input type="checkbox" name="accounts[{{ i }}][is_trust]" value="1" {% if acct.is_trust %}checked{% endif %} /> Trust</label>
+            <label class="flag-check"><input type="checkbox" name="accounts[{{ i }}][is_liability]" value="1" {% if acct.is_liability %}checked{% endif %} /> Liab</label>
+          </td>
+          <td><input type="number" name="accounts[{{ i }}][liability_rate]" value="{{ acct.liability_rate or '' }}" step="0.01" min="0" max="99" class="form-control form-control-sm" /></td>
+          <td><button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">✕</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <button type="button" class="btn btn-outline btn-sm mt-2" onclick="addAccountRow()">+ Add Account</button>
+  </div>
+
+  <!-- ── Notes ─────────────────────────────────────────────────────────── -->
+  <div class="card mb-4">
+    <div class="card-title">Notes</div>
+    <textarea name="notes" class="form-control" rows="3" placeholder="Internal notes about this client...">{{ client.notes or '' }}</textarea>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary btn-lg">
+      {% if mode == 'edit' %}Save Changes{% else %}Create Client{% endif %}
+    </button>
+    {% if mode == 'edit' %}
+    <a href="{{ url_for('client_detail', client_id=client.id) }}" class="btn btn-outline btn-lg">Cancel</a>
+    {% else %}
+    <a href="{{ url_for('clients_list') }}" class="btn btn-outline btn-lg">Cancel</a>
+    {% endif %}
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Pre-load account types for JS use
+  const ACCOUNT_TYPES = {{ account_types | tojson }};
+  // Auto-set flags when account type changes
+  const RETIREMENT_TYPES = ["IRA","Roth IRA","401K","403b","SEP IRA"];
+  const TRUST_TYPES      = ["Trust"];
+  const LIABILITY_TYPES  = ["Liability"];
+
+  function onTypeChange(sel, idx) {
+    const row = sel.closest("tr");
+    const val = sel.value;
+    const retCb  = row.querySelector(`[name="accounts[${idx}][is_retirement]"]`);
+    const trustCb = row.querySelector(`[name="accounts[${idx}][is_trust]"]`);
+    const liabCb  = row.querySelector(`[name="accounts[${idx}][is_liability]"]`);
+    if (retCb)  retCb.checked  = RETIREMENT_TYPES.includes(val);
+    if (trustCb) trustCb.checked = TRUST_TYPES.includes(val);
+    if (liabCb)  liabCb.checked  = LIABILITY_TYPES.includes(val);
+  }
+
+  // Toggle spouse section
+  document.getElementById("isMarried").addEventListener("change", function() {
+    const sec = document.getElementById("spouseSection");
+    sec.classList.toggle("hidden", !this.checked);
+    const g2 = document.getElementById("client2SalaryGroup");
+    if (g2) g2.classList.toggle("hidden", !this.checked);
+  });
+
+  let accountIdx = {{ accounts | length }};
+
+  function addAccountRow() {
+    const i = accountIdx++;
+    const tbody = document.getElementById("accountsBody");
+    const tr = document.createElement("tr");
+    tr.className = "acct-row";
+    tr.dataset.idx = i;
+    tr.innerHTML = `
+      <td>
+        <select name="accounts[${i}][owner]" class="form-control form-control-sm">
+          <option value="client1">Client 1</option>
+          <option value="client2">Client 2</option>
+          <option value="joint">Joint</option>
+          <option value="trust">Trust</option>
+        </select>
+      </td>
+      <td>
+        <select name="accounts[${i}][account_type]" class="form-control form-control-sm type-select" onchange="onTypeChange(this, ${i})">
+          ${ACCOUNT_TYPES.map(t => `<option value="${t}">${t}</option>`).join("")}
+        </select>
+      </td>
+      <td><input type="text" name="accounts[${i}][institution]" class="form-control form-control-sm" /></td>
+      <td><input type="text" name="accounts[${i}][account_number_last4]" maxlength="4" class="form-control form-control-sm acct-num" /></td>
+      <td class="flags-cell">
+        <label class="flag-check"><input type="checkbox" name="accounts[${i}][is_retirement]" value="1" /> Ret</label>
+        <label class="flag-check"><input type="checkbox" name="accounts[${i}][is_trust]" value="1" /> Trust</label>
+        <label class="flag-check"><input type="checkbox" name="accounts[${i}][is_liability]" value="1" /> Liab</label>
+      </td>
+      <td><input type="number" name="accounts[${i}][liability_rate]" step="0.01" min="0" max="99" class="form-control form-control-sm" /></td>
+      <td><button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  function removeRow(btn) {
+    btn.closest("tr").remove();
+  }
+</script>
+{% endblock %}

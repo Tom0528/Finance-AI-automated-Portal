@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}New Report – {{ client.display_name }} – AW Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Generate Report &mdash; {{ client.display_name }}</h1>
+  <a href="{{ url_for('client_detail', client_id=client.id) }}" class="btn btn-outline">← Back to Client</a>
+</div>
+
+<form method="POST" id="reportForm">
+
+  <!-- ── Period ──────────────────────────────────────────────────────────── -->
+  <div class="card mb-4">
+    <div class="card-title">Report Period</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Quarter</label>
+        <select name="quarter" class="form-control">
+          {% for q in quarters %}
+          <option value="{{ q }}" {% if q == current_quarter %}selected{% endif %}>Q{{ q }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Year</label>
+        <input type="number" name="year" value="{{ current_year }}" min="2020" max="2099" class="form-control" />
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SACS Section ───────────────────────────────────────────────────── -->
+  <div class="card mb-4">
+    <div class="card-title sacs-title">&#9679; SACS – Simple Automated Cashflow System</div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Total Monthly Inflow <span class="required">*</span></label>
+        <div class="input-prefix"><span>$</span>
+          <input type="number" name="inflow" id="inflow"
+                 value="{{ last_report.inflow or ((client.client1_salary or 0) + (client.client2_salary or 0)) }}"
+                 step="0.01" min="0" class="form-control calc-input" required />
+        </div>
+        <p class="field-hint">Static: ${{ "{:,.0f}".format((client.client1_salary or 0) + (client.client2_salary or 0)) }}/mo
+          (C1: ${{ "{:,.0f}".format(client.client1_salary or 0) }}
+          {% if client.is_married %} + C2: ${{ "{:,.0f}".format(client.client2_salary or 0) }}{% endif %})
+        </p>
+      </div>
+      <div class="form-group">
+        <label>Monthly Outflow (Expenses) <span class="required">*</span></label>
+        <div class="input-prefix"><span>$</span>
+          <input type="number" name="outflow" id="outflow"
+                 value="{{ last_report.outflow or client.monthly_expenses or '' }}"
+                 step="0.01" min="0" class="form-control calc-input" required />
+        </div>
+        <p class="field-hint">Agreed monthly expense budget</p>
+      </div>
+      <div class="form-group calc-result-group">
+        <label>Excess (Auto-calculated)</label>
+        <div class="calc-result" id="excessDisplay">–</div>
+        <p class="field-hint">Inflow − Outflow → to Private Reserve</p>
+      </div>
+    </div>
+
+    <div class="form-divider">Page 2 – Private Reserve</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Private Reserve (FICA) Balance</label>
+        <div class="input-prefix"><span>$</span>
+          <input type="number" name="private_reserve_balance" id="pr_balance"
+                 value="{{ last_report.private_reserve_balance or '' }}"
+                 step="0.01" min="0" class="form-control" />
+        </div>
+        <p class="field-hint">From bank email ~2 days before meeting</p>
+      </div>
+      <div class="form-group">
+        <label>Schwab Investment Balance</label>
+        <div class="input-prefix"><span>$</span>
+          <input type="number" name="schwab_investment_balance"
+                 value="{{ last_report.schwab_investment_balance or '' }}"
+                 step="0.01" min="0" class="form-control" />
+        </div>
+        <p class="field-hint">Schwab brokerage account (~2 days before)</p>
+      </div>
+      <div class="form-group calc-result-group">
+        <label>Private Reserve Target</label>
+        <div class="calc-result green-text" id="prTargetDisplay">–</div>
+        <p class="field-hint">6 × ${{ "{:,.0f}".format(client.monthly_expenses or 0) }} + ${{ "{:,.0f}".format(client.insurance_deductibles or 0) }} deductibles</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TCC Section ────────────────────────────────────────────────────── -->
+  {% if accounts %}
+  <div class="card mb-4">
+    <div class="card-title tcc-title">&#9679; TCC – Total Client Chart (Account Balances)</div>
+    <p class="muted small mb-3">Enter current balances for each account. Leave at 0 if unknown. Check "Stale" if data is not up to date.</p>
+
+    {% set retirement_c1 = accounts | selectattr('is_retirement', 'equalto', 1) | selectattr('owner', 'equalto', 'client1') | list %}
+    {% set retirement_c2 = accounts | selectattr('is_retirement', 'equalto', 1) | selectattr('owner', 'equalto', 'client2') | list %}
+    {% set non_ret = accounts | rejectattr('is_retirement', 'equalto', 1) | rejectattr('is_trust', 'equalto', 1) | rejectattr('is_liability', 'equalto', 1) | list %}
+    {% set trusts = accounts | selectattr('is_trust', 'equalto', 1) | list %}
+    {% set liabilities = accounts | selectattr('is_liability', 'equalto', 1) | list %}
+
+    {% macro acct_row(acct) %}
+    {% set last = last_balances.get(acct.id, {}) %}
+    <tr>
+      <td>
+        <span class="acct-type-badge {% if acct.is_retirement %}badge-green{% elif acct.is_trust %}badge-blue{% elif acct.is_liability %}badge-red{% endif %}">
+          {{ acct.account_type }}
+        </span>
+      </td>
+      <td>{{ acct.institution or '–' }}</td>
+      <td>{{ ('…' + acct.account_number_last4) if acct.account_number_last4 else '–' }}</td>
+      <td>
+        <div class="input-prefix sm"><span>$</span>
+          <input type="number" name="balance_{{ acct.id }}"
+                 value="{{ last.balance or '' }}" step="0.01" min="0"
+                 class="form-control form-control-sm tcc-balance" data-acct="{{ acct.id }}" />
+        </div>
+        {% if last.balance %}
+        <span class="last-val muted small">Last: ${{ "{:,.0f}".format(last.balance or 0) }}</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if not acct.is_liability %}
+        <div class="input-prefix sm"><span>$</span>
+          <input type="number" name="cash_value_{{ acct.id }}"
+                 value="{{ last.cash_value or '' }}" step="0.01" min="0"
+                 class="form-control form-control-sm" />
+        </div>
+        {% endif %}
+      </td>
+      <td><input type="date" name="as_of_date_{{ acct.id }}" value="{{ last.as_of_date or '' }}" class="form-control form-control-sm" /></td>
+      <td class="center"><input type="checkbox" name="is_stale_{{ acct.id }}" value="1" /></td>
+    </tr>
+    {% endmacro %}
+
+    {% if retirement_c1 %}
+    <div class="acct-section-label">{{ client.client1_first }} – Retirement</div>
+    <table class="acct-entry-table">
+      <thead><tr><th>Account</th><th>Institution</th><th>Acct #</th><th>Balance</th><th>Cash Value</th><th>As Of</th><th>Stale*</th></tr></thead>
+      <tbody>{% for acct in retirement_c1 %}{{ acct_row(acct) }}{% endfor %}</tbody>
+    </table>
+    {% endif %}
+
+    {% if retirement_c2 and client.is_married %}
+    <div class="acct-section-label">{{ client.client2_first }} – Retirement</div>
+    <table class="acct-entry-table">
+      <thead><tr><th>Account</th><th>Institution</th><th>Acct #</th><th>Balance</th><th>Cash Value</th><th>As Of</th><th>Stale*</th></tr></thead>
+      <tbody>{% for acct in retirement_c2 %}{{ acct_row(acct) }}{% endfor %}</tbody>
+    </table>
+    {% endif %}
+
+    {% if non_ret %}
+    <div class="acct-section-label">Non-Retirement Accounts</div>
+    <table class="acct-entry-table">
+      <thead><tr><th>Account</th><th>Institution</th><th>Acct #</th><th>Balance</th><th>Cash Value</th><th>As Of</th><th>Stale*</th></tr></thead>
+      <tbody>{% for acct in non_ret %}{{ acct_row(acct) }}{% endfor %}</tbody>
+    </table>
+    {% endif %}
+
+    {% if trusts %}
+    <div class="acct-section-label">Trust</div>
+    <table class="acct-entry-table">
+      <thead><tr><th>Account</th><th>Institution</th><th>Acct #</th><th>Balance (Zillow Zestimate)</th><th>Cash Value</th><th>As Of</th><th>Stale*</th></tr></thead>
+      <tbody>{% for acct in trusts %}{{ acct_row(acct) }}{% endfor %}</tbody>
+    </table>
+    {% endif %}
+
+    {% if liabilities %}
+    <div class="acct-section-label">Liabilities</div>
+    <table class="acct-entry-table">
+      <thead><tr><th>Liability</th><th>Institution</th><th>Rate</th><th>Remaining Balance</th><th></th><th>As Of</th><th>Stale*</th></tr></thead>
+      <tbody>{% for acct in liabilities %}{{ acct_row(acct) }}{% endfor %}</tbody>
+    </table>
+    {% endif %}
+
+    <!-- Live TCC totals -->
+    <div class="tcc-totals-live">
+      <div class="tcc-total-item">
+        <label>C1 Retirement</label>
+        <span id="tot_c1ret">$0</span>
+      </div>
+      {% if client.is_married %}
+      <div class="tcc-total-item">
+        <label>C2 Retirement</label>
+        <span id="tot_c2ret">$0</span>
+      </div>
+      {% endif %}
+      <div class="tcc-total-item">
+        <label>Non-Retirement</label>
+        <span id="tot_nonret">$0</span>
+      </div>
+      <div class="tcc-total-item">
+        <label>Trust</label>
+        <span id="tot_trust">$0</span>
+      </div>
+      <div class="tcc-total-item highlight">
+        <label>Grand Total</label>
+        <span id="tot_grand">$0</span>
+      </div>
+      <div class="tcc-total-item red-text">
+        <label>Liabilities</label>
+        <span id="tot_liab">$0</span>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="alert alert-warning">No accounts configured for this client. <a href="{{ url_for('client_edit', client_id=client.id) }}">Add accounts first</a>.</div>
+  {% endif %}
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary btn-lg">Create Report &amp; Generate PDFs</button>
+    <a href="{{ url_for('client_detail', client_id=client.id) }}" class="btn btn-outline btn-lg">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Real-time SACS calculations
+  const monthlyExpenses = {{ client.monthly_expenses or 0 }};
+  const insuranceDed    = {{ client.insurance_deductibles or 0 }};
+  const prTarget = (6 * monthlyExpenses) + insuranceDed;
+
+  document.getElementById("prTargetDisplay").textContent =
+    "$" + prTarget.toLocaleString("en-US", {minimumFractionDigits: 0, maximumFractionDigits: 0});
+
+  function updateSACS() {
+    const inflow  = parseFloat(document.getElementById("inflow").value)  || 0;
+    const outflow = parseFloat(document.getElementById("outflow").value) || 0;
+    const excess  = inflow - outflow;
+    const el = document.getElementById("excessDisplay");
+    el.textContent = (excess >= 0 ? "$" : "-$") + Math.abs(excess).toLocaleString("en-US", {minimumFractionDigits: 0});
+    el.className = "calc-result " + (excess >= 0 ? "green-text" : "red-text");
+  }
+
+  document.getElementById("inflow").addEventListener("input", updateSACS);
+  document.getElementById("outflow").addEventListener("input", updateSACS);
+  updateSACS();
+
+  // TCC live totals
+  const accountMeta = {
+    {% for acct in accounts %}
+    {{ acct.id }}: {
+      is_retirement: {{ 1 if acct.is_retirement else 0 }},
+      is_trust:      {{ 1 if acct.is_trust else 0 }},
+      is_liability:  {{ 1 if acct.is_liability else 0 }},
+      owner:         "{{ acct.owner }}"
+    },
+    {% endfor %}
+  };
+
+  function updateTCCTotals() {
+    let c1ret=0, c2ret=0, nonret=0, trust=0, liab=0;
+    document.querySelectorAll(".tcc-balance").forEach(inp => {
+      const aid = parseInt(inp.dataset.acct);
+      const val = parseFloat(inp.value) || 0;
+      const m = accountMeta[aid];
+      if (!m) return;
+      if (m.is_liability) { liab += val; }
+      else if (m.is_trust) { trust += val; }
+      else if (m.is_retirement) {
+        if (m.owner === "client1") c1ret += val;
+        else if (m.owner === "client2") c2ret += val;
+        else { c1ret += val/2; c2ret += val/2; }
+      } else { nonret += val; }
+    });
+    const grand = c1ret + c2ret + nonret + trust;
+    const fmt = v => "$" + v.toLocaleString("en-US", {minimumFractionDigits: 0, maximumFractionDigits: 0});
+    const el = (id) => document.getElementById(id);
+    if (el("tot_c1ret"))  el("tot_c1ret").textContent  = fmt(c1ret);
+    if (el("tot_c2ret"))  el("tot_c2ret").textContent  = fmt(c2ret);
+    if (el("tot_nonret")) el("tot_nonret").textContent = fmt(nonret);
+    if (el("tot_trust"))  el("tot_trust").textContent  = fmt(trust);
+    if (el("tot_grand"))  el("tot_grand").textContent  = fmt(grand);
+    if (el("tot_liab"))   el("tot_liab").textContent   = fmt(liab);
+  }
+
+  document.querySelectorAll(".tcc-balance").forEach(inp => {
+    inp.addEventListener("input", updateTCCTotals);
+  });
+  updateTCCTotals();
+</script>
+{% endblock %}

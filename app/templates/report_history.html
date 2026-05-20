@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Reports – {{ client.display_name }} – AW Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Reports &mdash; {{ client.display_name }}</h1>
+  <div class="header-actions">
+    <a href="{{ url_for('client_detail', client_id=client.id) }}" class="btn btn-outline">← Client Profile</a>
+    <a href="{{ url_for('report_new', client_id=client.id) }}" class="btn btn-primary">+ New Report</a>
+  </div>
+</div>
+
+{% if reports %}
+<div class="card">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Period</th>
+        <th>Inflow</th>
+        <th>Outflow</th>
+        <th>Excess</th>
+        <th>Priv. Reserve</th>
+        <th>Priv. Reserve Target</th>
+        <th>Created</th>
+        <th>PDFs</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in reports %}
+      <tr>
+        <td><a href="{{ url_for('report_detail', client_id=client.id, report_id=r.id) }}">Q{{ r.quarter }} {{ r.year }}</a></td>
+        <td>${{ "{:,.0f}".format(r.inflow or 0) }}</td>
+        <td>${{ "{:,.0f}".format(r.outflow or 0) }}</td>
+        <td class="{% if (r.excess or 0) >= 0 %}text-green{% else %}text-red{% endif %}">
+          ${{ "{:,.0f}".format(r.excess or 0) }}
+        </td>
+        <td>${{ "{:,.0f}".format(r.private_reserve_balance or 0) }}</td>
+        <td>${{ "{:,.0f}".format(r.private_reserve_target or 0) }}</td>
+        <td class="muted">{{ r.created_at[:10] if r.created_at else '–' }}</td>
+        <td>
+          <a href="{{ url_for('download_sacs', client_id=client.id, report_id=r.id) }}" class="btn btn-xs btn-green">SACS</a>
+          <a href="{{ url_for('download_tcc',  client_id=client.id, report_id=r.id) }}" class="btn btn-xs btn-blue">TCC</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="empty-icon">&#128196;</div>
+  <p>No reports yet. <a href="{{ url_for('report_new', client_id=client.id) }}">Generate the first report</a>.</p>
+</div>
+{% endif %}
+{% endblock %}

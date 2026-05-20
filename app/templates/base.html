@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}AW Client Report Portal{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <span class="nav-logo">&#9679;</span>
+      <span class="nav-title">AW Client Report Portal</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="{{ url_for('clients_list') }}" class="{% if request.endpoint == 'clients_list' %}active{% endif %}">Clients</a></li>
+    </ul>
+  </nav>
+
+  <main class="main-content">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, msg in messages %}
+          <div class="alert alert-{{ category }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <span>AW Client Report Portal &mdash; Internal Use Only</span>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

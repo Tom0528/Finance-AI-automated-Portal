@@ -1,0 +1,46 @@
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ─────────────────────────────────────────────────────
+venv/
+env/
+.venv/
+.env_backup
+
+# ── Environment / secrets ────────────────────────────────────────────────────
+app/.env
+.env
+*.env
+
+# ── Database ─────────────────────────────────────────────────────────────────
+*.db
+*.sqlite3
+
+# ── Generated assets (image processing cache — re-created at runtime) ────────
+app/static/images/*_white.jpg
+app/static/images/*_clean.png
+app/static/images/*_navy.png
+
+# ── PDF test/dev outputs ──────────────────────────────────────────────────────
+app/*.pdf
+
+# ── Dev/test helper scripts ───────────────────────────────────────────────────
+app/gen_*.py
+app/test_*.py
+
+# ── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDEs ─────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp

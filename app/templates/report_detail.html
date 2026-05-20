@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Q{{ report.quarter }} {{ report.year }} – {{ client.display_name }} – AW Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Q{{ report.quarter }} {{ report.year }} &mdash; {{ client.display_name }}</h1>
+  <div class="header-actions">
+    <a href="{{ url_for('client_detail', client_id=client.id) }}" class="btn btn-outline">← Back</a>
+    <a href="{{ url_for('download_sacs', client_id=client.id, report_id=report.id) }}"
+       class="btn btn-green">&#8681; SACS PDF</a>
+    <a href="{{ url_for('download_tcc', client_id=client.id, report_id=report.id) }}"
+       class="btn btn-blue">&#8681; TCC PDF</a>
+  </div>
+</div>
+
+<div class="pdf-download-banner">
+  <div class="banner-icon">&#128196;</div>
+  <div>
+    <strong>Report Ready</strong> &mdash; Q{{ report.quarter }} {{ report.year }}
+    <br /><span class="muted small">Generated {{ report.created_at[:10] if report.created_at else '' }}</span>
+  </div>
+  <div class="banner-btns">
+    <a href="{{ url_for('download_sacs', client_id=client.id, report_id=report.id) }}"
+       class="btn btn-lg btn-green">&#8681; Download SACS PDF</a>
+    <a href="{{ url_for('download_tcc', client_id=client.id, report_id=report.id) }}"
+       class="btn btn-lg btn-blue">&#8681; Download TCC PDF</a>
+
+    {% if canva_enabled %}
+    <button class="btn btn-lg btn-canva" id="canva-sacs-btn"
+            onclick="exportToCanva('sacs', this)">
+      <svg class="canva-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm1 14.5h-2v-5H9.5v-2H11V8h2v1.5h1.5v2H13v5z"/></svg>
+      Export SACS to Canva
+    </button>
+    <button class="btn btn-lg btn-canva" id="canva-tcc-btn"
+            onclick="exportToCanva('tcc', this)">
+      <svg class="canva-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm1 14.5h-2v-5H9.5v-2H11V8h2v1.5h1.5v2H13v5z"/></svg>
+      Export TCC to Canva
+    </button>
+    {% else %}
+    <span class="btn btn-lg btn-canva btn-disabled"
+          title="Set CANVA_API_KEY in .env to enable this feature">
+      Canva Export (not configured)
+    </span>
+    {% endif %}
+  </div>
+</div>
+
+{% if canva_enabled %}
+<script>
+async function exportToCanva(reportType, btn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Uploading to Canva…';
+
+  try {
+    const resp = await fetch(
+      "{{ url_for('export_to_canva', client_id=client.id, report_id=report.id, report_type='__TYPE__') }}"
+        .replace('__TYPE__', reportType),
+      { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } }
+    );
+    const data = await resp.json();
+
+    if (data.edit_url) {
+      window.open(data.edit_url, '_blank', 'noopener');
+    } else {
+      alert('Canva export failed: ' + (data.error || 'Unknown error'));
+    }
+  } catch (err) {
+    alert('Network error: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+</script>
+{% endif %}
+
+<div class="two-col-grid mt-4">
+  <!-- SACS Summary -->
+  <div class="card">
+    <div class="card-title sacs-title">SACS Summary</div>
+    <table class="info-table">
+      <tr><th>Monthly Inflow</th><td class="text-green">${{ "{:,.0f}".format(report.inflow or 0) }}</td></tr>
+      <tr><th>Monthly Outflow</th><td class="text-red">${{ "{:,.0f}".format(report.outflow or 0) }}</td></tr>
+      <tr><th>Excess</th><td class="{% if (report.excess or 0) >= 0 %}text-green{% else %}text-red{% endif %} bold">
+        ${{ "{:,.0f}".format(report.excess or 0) }}</td></tr>
+      <tr><th>Private Reserve Balance</th><td>${{ "{:,.0f}".format(report.private_reserve_balance or 0) }}</td></tr>
+      <tr><th>Private Reserve Target</th><td>${{ "{:,.0f}".format(report.private_reserve_target or 0) }}</td></tr>
+      <tr><th>Schwab Investment</th><td>${{ "{:,.0f}".format(report.schwab_investment_balance or 0) }}</td></tr>
+    </table>
+  </div>
+
+  <!-- TCC Summary -->
+  <div class="card">
+    <div class="card-title tcc-title">TCC Summary</div>
+    <table class="info-table">
+      <tr><th>Client 1 Retirement</th><td>${{ "{:,.2f}".format(totals.c1_ret) }}</td></tr>
+      {% if client.is_married %}
+      <tr><th>Client 2 Retirement</th><td>${{ "{:,.2f}".format(totals.c2_ret) }}</td></tr>
+      {% endif %}
+      <tr><th>Non-Retirement Total</th><td>${{ "{:,.2f}".format(totals.non_ret) }}</td></tr>
+      <tr><th>Trust</th><td>${{ "{:,.2f}".format(totals.trust) }}</td></tr>
+      <tr class="totals-row"><th>Grand Total</th><td class="bold">${{ "{:,.2f}".format(totals.grand) }}</td></tr>
+      <tr><th>Liabilities (not subtracted)</th><td class="text-red">${{ "{:,.2f}".format(totals.liab) }}</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- Account Balances -->
+{% if balances %}
+<div class="card mt-4">
+  <div class="card-title">Account Balances</div>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Account</th>
+        <th>Institution</th>
+        <th>Acct #</th>
+        <th>Category</th>
+        <th>Balance</th>
+        <th>Cash Value</th>
+        <th>As Of</th>
+        <th>Stale</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in balances %}
+      <tr {% if b.is_stale %}class="stale-row"{% endif %}>
+        <td>{{ b.account_type }}</td>
+        <td>{{ b.institution or '–' }}</td>
+        <td>{{ ('…' + b.account_number_last4) if b.account_number_last4 else '–' }}</td>
+        <td>
+          {% if b.is_retirement %}<span class="badge badge-green">Retirement</span>
+          {% elif b.is_trust %}<span class="badge badge-blue">Trust</span>
+          {% elif b.is_liability %}<span class="badge badge-red">Liability</span>
+          {% else %}<span class="badge badge-gray">Non-Ret</span>{% endif %}
+        </td>
+        <td>${{ "{:,.2f}".format(b.balance or 0) }}</td>
+        <td>{{ ("$" + "{:,.2f}".format(b.cash_value)) if b.cash_value else '–' }}</td>
+        <td>{{ b.as_of_date or '–' }}</td>
+        <td>{% if b.is_stale %}<span class="badge badge-red">*</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

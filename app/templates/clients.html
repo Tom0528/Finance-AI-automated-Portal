@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Clients – AW Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Clients</h1>
+  <a href="{{ url_for('client_new') }}" class="btn btn-primary">+ New Client</a>
+</div>
+
+{% if clients %}
+<div class="card-grid">
+  {% for client in clients %}
+  <div class="client-card">
+    <div class="client-card-header">
+      <h2 class="client-name">{{ client.display_name }}</h2>
+      {% if client.is_married %}
+        <span class="badge badge-blue">Married</span>
+      {% endif %}
+    </div>
+    <div class="client-card-body">
+      <p class="client-info-line">
+        <strong>Primary:</strong> {{ client.client1_first }} {{ client.client1_last }}
+        {% if client.client1_dob %}<span class="muted">· DOB {{ client.client1_dob }}</span>{% endif %}
+      </p>
+      {% if client.is_married and client.client2_first %}
+      <p class="client-info-line">
+        <strong>Spouse:</strong> {{ client.client2_first }} {{ client.client2_last }}
+        {% if client.client2_dob %}<span class="muted">· DOB {{ client.client2_dob }}</span>{% endif %}
+      </p>
+      {% endif %}
+      <div class="client-financials">
+        <span class="fin-item">
+          <label>Monthly Inflow</label>
+          <strong>${{ "{:,.0f}".format((client.client1_salary or 0) + (client.client2_salary or 0)) }}</strong>
+        </span>
+        <span class="fin-item">
+          <label>Monthly Expenses</label>
+          <strong>${{ "{:,.0f}".format(client.monthly_expenses or 0) }}</strong>
+        </span>
+      </div>
+      {% if client.last_report_at %}
+      <p class="muted small">Last report: {{ client.last_report_at[:10] }}</p>
+      {% else %}
+      <p class="muted small">No reports yet</p>
+      {% endif %}
+    </div>
+    <div class="client-card-actions">
+      <a href="{{ url_for('client_detail', client_id=client.id) }}" class="btn btn-sm btn-outline">View</a>
+      <a href="{{ url_for('report_new', client_id=client.id) }}" class="btn btn-sm btn-primary">Generate Report</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="empty-icon">&#128193;</div>
+  <p>No clients yet. <a href="{{ url_for('client_new') }}">Add your first client</a>.</p>
+</div>
+{% endif %}
+{% endblock %}

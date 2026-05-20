@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}{{ client.display_name }} – AW Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>{{ client.display_name }}</h1>
+  <div class="header-actions">
+    <a href="{{ url_for('client_edit', client_id=client.id) }}" class="btn btn-outline">Edit</a>
+    <a href="{{ url_for('report_new', client_id=client.id) }}" class="btn btn-primary">Generate Report</a>
+  </div>
+</div>
+
+<div class="two-col-grid">
+  <!-- ── Client Info ──────────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">Client Information</div>
+    <table class="info-table">
+      <tr><th>Primary Client</th><td>{{ client.client1_first }} {{ client.client1_last }}</td></tr>
+      {% if client.client1_dob %}<tr><th>DOB</th><td>{{ client.client1_dob }}</td></tr>{% endif %}
+      {% if client.client1_ssn4 %}<tr><th>SSN Last 4</th><td>...{{ client.client1_ssn4 }}</td></tr>{% endif %}
+      {% if client.is_married %}
+      <tr><th>Spouse</th><td>{{ client.client2_first }} {{ client.client2_last }}</td></tr>
+      {% if client.client2_dob %}<tr><th>Spouse DOB</th><td>{{ client.client2_dob }}</td></tr>{% endif %}
+      {% if client.client2_ssn4 %}<tr><th>Spouse SSN Last 4</th><td>...{{ client.client2_ssn4 }}</td></tr>{% endif %}
+      {% endif %}
+    </table>
+  </div>
+
+  <!-- ── Static Financials ─────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">Static Financials</div>
+    <table class="info-table">
+      <tr>
+        <th>Client 1 Salary</th>
+        <td>${{ "{:,.0f}".format(client.client1_salary or 0) }}/mo</td>
+      </tr>
+      {% if client.is_married %}
+      <tr>
+        <th>Client 2 Salary</th>
+        <td>${{ "{:,.0f}".format(client.client2_salary or 0) }}/mo</td>
+      </tr>
+      {% endif %}
+      <tr>
+        <th>Total Monthly Inflow</th>
+        <td class="highlight">${{ "{:,.0f}".format((client.client1_salary or 0) + (client.client2_salary or 0)) }}/mo</td>
+      </tr>
+      <tr>
+        <th>Monthly Expenses (Outflow)</th>
+        <td>${{ "{:,.0f}".format(client.monthly_expenses or 0) }}/mo</td>
+      </tr>
+      <tr>
+        <th>Insurance Deductibles</th>
+        <td>${{ "{:,.0f}".format(client.insurance_deductibles or 0) }}</td>
+      </tr>
+      <tr>
+        <th>Private Reserve Target</th>
+        <td class="highlight">${{ "{:,.0f}".format((client.monthly_expenses or 0) * 6 + (client.insurance_deductibles or 0)) }}</td>
+      </tr>
+    </table>
+    <p class="muted small">Target = 6 × monthly expenses + deductibles</p>
+  </div>
+</div>
+
+<!-- ── Accounts ──────────────────────────────────────────────────────────── -->
+<div class="card mt-4">
+  <div class="card-title-row">
+    <div class="card-title">Accounts &amp; Liabilities</div>
+    <a href="{{ url_for('client_edit', client_id=client.id) }}" class="btn btn-sm btn-outline">Edit</a>
+  </div>
+  {% if accounts %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Owner</th>
+        <th>Type</th>
+        <th>Institution</th>
+        <th>Acct #</th>
+        <th>Flags</th>
+        <th>Liab. Rate</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for acct in accounts %}
+      <tr>
+        <td>
+          {% if acct.owner == 'client1' %}{{ client.client1_first }}
+          {% elif acct.owner == 'client2' %}{{ client.client2_first }}
+          {% else %}{{ acct.owner | title }}{% endif %}
+        </td>
+        <td>{{ acct.account_type }}</td>
+        <td>{{ acct.institution or '–' }}</td>
+        <td>{{ ('…' + acct.account_number_last4) if acct.account_number_last4 else '–' }}</td>
+        <td>
+          {% if acct.is_retirement %}<span class="badge badge-green">Retirement</span>{% endif %}
+          {% if acct.is_trust %}<span class="badge badge-blue">Trust</span>{% endif %}
+          {% if acct.is_liability %}<span class="badge badge-red">Liability</span>{% endif %}
+        </td>
+        <td>{{ "{:.1f}%".format(acct.liability_rate) if acct.is_liability else '–' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No accounts configured. <a href="{{ url_for('client_edit', client_id=client.id) }}">Add accounts</a>.</p>
+  {% endif %}
+</div>
+
+<!-- ── Report History ─────────────────────────────────────────────────────── -->
+<div class="card mt-4">
+  <div class="card-title-row">
+    <div class="card-title">Report History</div>
+    <a href="{{ url_for('report_new', client_id=client.id) }}" class="btn btn-sm btn-primary">+ New Report</a>
+  </div>
+  {% if reports %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Period</th>
+        <th>Inflow</th>
+        <th>Outflow</th>
+        <th>Excess</th>
+        <th>Private Reserve</th>
+        <th>Created</th>
+        <th>Download</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in reports %}
+      <tr>
+        <td><a href="{{ url_for('report_detail', client_id=client.id, report_id=r.id) }}">Q{{ r.quarter }} {{ r.year }}</a></td>
+        <td>${{ "{:,.0f}".format(r.inflow or 0) }}</td>
+        <td>${{ "{:,.0f}".format(r.outflow or 0) }}</td>
+        <td class="{% if (r.excess or 0) >= 0 %}text-green{% else %}text-red{% endif %}">
+          ${{ "{:,.0f}".format(r.excess or 0) }}
+        </td>
+        <td>${{ "{:,.0f}".format(r.private_reserve_balance or 0) }}</td>
+        <td class="muted">{{ r.created_at[:10] if r.created_at else '–' }}</td>
+        <td>
+          <a href="{{ url_for('download_sacs', client_id=client.id, report_id=r.id) }}" class="btn btn-xs btn-green">SACS</a>
+          <a href="{{ url_for('download_tcc', client_id=client.id, report_id=r.id) }}" class="btn btn-xs btn-blue">TCC</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No reports generated yet.</p>
+  {% endif %}
+</div>
+
+<!-- ── Danger Zone ─────────────────────────────────────────────────────────── -->
+<div class="card mt-4 danger-zone">
+  <div class="card-title">Danger Zone</div>
+  <form method="POST" action="{{ url_for('client_delete', client_id=client.id) }}"
+        onsubmit="return confirm('Permanently delete {{ client.display_name }} and all their reports?')">
+    <button type="submit" class="btn btn-danger">Delete Client</button>
+  </form>
+</div>
+{% endblock %}
