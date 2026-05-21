@@ -36,6 +36,12 @@ app/*.pdf
 app/gen_*.py
 app/test_*.py
 
+# ── Assignment / onboarding materials (large files, not part of the app) ─────
+*.mp4
+*.docx
+*.xlsx
+Onboarding Materials/
+
 # ── OS ───────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

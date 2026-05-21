@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "app/wsgi.py",
+      "use": "@vercel/python",
+      "config": { "maxLambdaSize": "50mb" }
+    }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "app/wsgi.py" }
+  ],
+  "env": {
+    "FLASK_ENV": "production",
+    "DATABASE_PATH": "/tmp/portal.db"
+  }
+}

@@ -1,9 +1,10 @@
 """
-WSGI entry-point for production servers (Gunicorn, uWSGI, etc.).
+WSGI entry-point for production servers and Vercel.
 
-Usage:
-    gunicorn wsgi:application --bind 0.0.0.0:$PORT
+- Gunicorn (Render / Railway):  gunicorn wsgi:application
+- Vercel Python runtime:        looks for a variable named 'app'
 """
 from app import create_app
 
 application = create_app()
+app = application          # Vercel requires the variable to be named 'app'
